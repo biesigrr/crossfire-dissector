@@ -7,14 +7,12 @@
 crossfire_protocol = Proto("CrossFire", "CrossFire Protocol")
 
 packet_length = ProtoField.uint16("crossfire.packet.length", "Packet Length", base.DEC)
-packet_op_group = ProtoField.uint8("crossfire.packet.op.group", "OpCode Group", base.DEC)
-packet_op_action = ProtoField.uint16("crossfire.packet.op.action", "OpCode Action", base.DEC)
+packet_op = ProtoField.uint8("crossfire.packet.op", "OpCode", base.DEC)
 packet_data = ProtoField.bytes("crossfire.packet.data", "Data", base.NONE)
 
 crossfire_protocol.fields = { 
     packet_length,
-    packet_op_group,
-    packet_op_action,
+    packet_op,
     packet_data
 }
 
@@ -34,10 +32,26 @@ function crossfire_protocol_dissect_reassebmled(tvb, pinfo, tree)
     local subtree = tree:add(crossfire_protocol, tvb(), "CrossFire Packet")
 
     subtree:add_le(packet_length, tvb(1, 2))
-    subtree:add(packet_op_group, tvb(3, 1))
-    subtree:add_le(packet_op_action, tvb(4, 2))
+    subtree:add(packet_op, tvb(3, 1))
+    subtree:add(packet_op, tvb(4, 1))
+    subtree:add(packet_op, tvb(5, 1))
     subtree:add(packet_data, tvb(8, tvb:len() - 9))
 
+    op1 = tvb(3, 1):uint()
+    op2 = tvb(4, 1):uint()
+    op3 = tvb(5, 1):uint()
+
+    if (0 == op1 and 1 == op2 and 0 == op3) then
+        -- Parse server list and register present ports
+        -- for our dissector protocol 
+        server_count = tvb(8 + 45, 2):le_uint()
+        for i=1,server_count,1 do
+            port_offset = 8 + 15 + i * 89
+            port = tvb(port_offset, 4):le_uint()
+            
+            DissectorTable.get("tcp.port"):add(port, crossfire_protocol)
+        end
+    end
 end 
 
 function crossfire_protocol.dissector(tvb, pinfo, tree)
@@ -47,4 +61,4 @@ function crossfire_protocol.dissector(tvb, pinfo, tree)
 end
 
 local tcp_port = DissectorTable.get("tcp.port")
-tcp_port:add(10008, crossfire_protocol)
+tcp_port:add(13008, crossfire_protocol)
